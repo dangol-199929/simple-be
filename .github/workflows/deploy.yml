@@ -1,0 +1,70 @@
+# Phase 3: CI/CD — Build Docker image, push to ECR, deploy to ECS (Fargate).
+# Trigger: push to main. No manual uploads; everything runs from this workflow.
+#
+# Required GitHub Secrets (Settings → Secrets and variables → Actions):
+#   AWS_ACCESS_KEY_ID     — IAM user access key (e.g. snippet-manager-dev)
+#   AWS_SECRET_ACCESS_KEY — IAM user secret key
+#   AWS_REGION            — e.g. us-east-1
+#   ECS_CLUSTER_NAME      — From CDK deploy output "EcsClusterName"
+#   ECS_SERVICE_NAME      — From CDK deploy output "EcsServiceName"
+
+name: Build and Deploy API
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # Allow manual run from Actions tab
+
+env:
+  ECR_REPOSITORY: snippet-manager-api
+  DOCKER_IMAGE_TAG: latest
+
+jobs:
+  deploy:
+    name: Build, Push, Deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Set ECR URI
+        id: ecr
+        run: |
+          ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+          REGION=${{ secrets.AWS_REGION }}
+          echo "uri=${ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${ECR_REPOSITORY}" >> $GITHUB_OUTPUT
+          echo "ECR_URI=${ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${ECR_REPOSITORY}" >> $GITHUB_ENV
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build Docker image
+        run: docker build -t ${{ env.ECR_URI }}:${{ env.DOCKER_IMAGE_TAG }} .
+
+      - name: Push image to ECR
+        run: docker push ${{ env.ECR_URI }}:${{ env.DOCKER_IMAGE_TAG }}
+
+      - name: Force ECS service deployment
+        run: |
+          aws ecs update-service \
+            --cluster "${{ secrets.ECS_CLUSTER_NAME }}" \
+            --service "${{ secrets.ECS_SERVICE_NAME }}" \
+            --force-new-deployment \
+            --region "${{ secrets.AWS_REGION }}" \
+            --output text --query 'service.serviceName'
+
+      - name: Deployment summary
+        run: |
+          echo "Image pushed: ${{ env.ECR_URI }}:${{ env.DOCKER_IMAGE_TAG }}"
+          echo "ECS service update triggered. New tasks will pull the image and replace old ones."

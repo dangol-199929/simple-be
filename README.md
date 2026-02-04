@@ -103,6 +103,10 @@ simple-be/
 - `pnpm start` — run `node dist/index.js`.
 - `pnpm prisma:migrate` — run Prisma migrations in dev.
 
+## Documentation
+
+- **[AWS + Docker Backend Guide](docs/AWS-DOCKER-BACKEND-GUIDE.md)** — Architecture, Phases 1–3 (local containerization, CDK infra, CI/CD), every bug we solved (Prisma, Docker, ECS, RDS TLS), commands, and best practices for future backend work on AWS and Docker.
+
 ---
 
 _This README describes the current behavior of the Snippet Manager API (simple-be) as implemented in the codebase._

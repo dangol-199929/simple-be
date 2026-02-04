@@ -1,22 +1,20 @@
 # Stage 1: build the app and generate Prisma client
 FROM node:22-alpine AS builder
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+COPY package.json ./
+RUN npm config set fetch-retries 5 && npm config set fetch-retry-mintimeout 20000 && npm config set fetch-retry-maxtimeout 120000 && npm install
 
 COPY prisma ./prisma/
 COPY prisma.config.ts tsconfig.json ./
 COPY src ./src/
 
-RUN pnpm prisma generate && pnpm build
+RUN npx prisma generate && npm run build
 
 # Stage 2: minimal image to run the app
 FROM node:22-alpine AS runner
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
 # Run as non-root (good practice for production)

@@ -1,3 +1,4 @@
+import type { PoolConfig } from "pg";
 import { PrismaClient } from "../generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
@@ -23,9 +24,31 @@ function getConnectionString(): string {
   );
 }
 
+/** Strip sslmode from URL so pg doesn't override our explicit ssl config. */
+function connectionStringWithoutSslMode(url: string): string {
+  try {
+    const u = new URL(url);
+    u.searchParams.delete("sslmode");
+    u.searchParams.delete("ssl");
+    return u.toString();
+  } catch {
+    return url.replace(/[?&]sslmode=[^&]+/g, "").replace(/[?&]ssl=[^&]+/g, "");
+  }
+}
+
 function createPrisma() {
-  const connectionString = getConnectionString();
-  const adapter = new PrismaPg({ connectionString });
+  let connectionString = getConnectionString();
+  const isRds = Boolean(process.env.DB_HOST);
+  // RDS: use TLS but don't verify cert (Node rejects RDS cert). Strip sslmode from URL
+  // so pg-connection-string parse() doesn't override our ssl config.
+  if (isRds) {
+    connectionString = connectionStringWithoutSslMode(connectionString);
+  }
+  const poolConfig: PoolConfig = {
+    connectionString,
+    ...(isRds && { ssl: { rejectUnauthorized: false } }),
+  };
+  const adapter = new PrismaPg(poolConfig);
   return new PrismaClient({ adapter });
 }
 

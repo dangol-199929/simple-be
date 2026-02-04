@@ -31,8 +31,15 @@ app.use(
     res: express.Response,
     _next: express.NextFunction,
   ) => {
-    logger.error(err);
-    res.status(500).json({ error: "Internal server error" });
+    const message = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : undefined;
+    logger.error({ err, message, stack }, "Unhandled error");
+    // Expose message in 500 response so we can see the real error (remove for prod hardening)
+    res.status(500).json({
+      error: "Internal server error",
+      // message,
+      // ...(process.env.EXPOSE_ERROR === "1" && { stack }),
+    });
   },
 );
 

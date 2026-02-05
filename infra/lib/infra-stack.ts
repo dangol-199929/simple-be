@@ -1,5 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import { Construct } from "constructs";
+import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
+import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as ecs from "aws-cdk-lib/aws-ecs";
@@ -148,6 +150,20 @@ export class InfraStack extends cdk.Stack {
       defaultTargetGroups: [tg],
     });
 
+    // --- CloudFront (HTTPS for frontend; origin = ALB over HTTP) ---
+    const distribution = new cloudfront.Distribution(this, "Distribution", {
+      defaultBehavior: {
+        origin: new origins.LoadBalancerV2Origin(alb, {
+          protocolPolicy: cloudfront.OriginProtocolPolicy.HTTP_ONLY,
+        }),
+        cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+        allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+      },
+      defaultRootObject: "",
+      comment: "API - Snippet Manager",
+    });
+
     // --- Outputs ---
     new cdk.CfnOutput(this, "ApiRepoUri", {
       value: repo.repositoryUri,
@@ -156,7 +172,12 @@ export class InfraStack extends cdk.Stack {
     });
     new cdk.CfnOutput(this, "AlbDnsName", {
       value: alb.loadBalancerDnsName,
-      description: "ALB DNS name - open in browser to hit the API",
+      description: "ALB DNS name (HTTP) - use ApiUrl for HTTPS",
+    });
+    new cdk.CfnOutput(this, "ApiUrl", {
+      value: `https://${distribution.distributionDomainName}`,
+      description:
+        "API base URL over HTTPS - use this in frontend (no mixed content)",
     });
     new cdk.CfnOutput(this, "DbSecretArn", {
       value: db.secret.secretArn,
